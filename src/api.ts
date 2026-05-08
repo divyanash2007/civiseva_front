@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Use VITE_API_URL if defined, otherwise fallback to the current tunnel or localhost
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://jvc-slope-sandy-geography.trycloudflare.com';
+// Use VITE_API_URL if defined, otherwise fallback to the live production backend
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://civiseva.steeze.co.in';
 
 export const api = axios.create({
   baseURL: BASE_URL,
