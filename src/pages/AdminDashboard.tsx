@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Flame, Trash2, Droplet, Zap, Route as RouteIcon, MoreHorizontal, CheckCircle, Clock, AlertTriangle, ArrowLeft, Search, Bell, User, LayoutDashboard, Settings, LogOut } from 'lucide-react';
+import { XAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { Flame, Trash2, Droplet, Zap, Route as RouteIcon, MoreHorizontal, CheckCircle, Clock, AlertTriangle, Search, Bell, User, LogOut, Loader2, RefreshCw } from 'lucide-react';
+import { api } from '../api';
 
 const mockProgressData = [
   { name: 'Mon', resolved: 10, new: 15 },
@@ -12,16 +13,85 @@ const mockProgressData = [
 ];
 
 const categories = [
-  { id: 'fire', name: 'Fire Dept', icon: Flame },
-  { id: 'garbage', name: 'Garbage', icon: Trash2 },
-  { id: 'water', name: 'Water', icon: Droplet },
-  { id: 'electricity', name: 'Electricity', icon: Zap },
-  { id: 'road', name: 'Roads', icon: RouteIcon },
-  { id: 'general', name: 'General', icon: MoreHorizontal },
+  { id: 'road', name: 'Roads', icon: RouteIcon, backendName: 'Road' },
+  { id: 'water', name: 'Water', icon: Droplet, backendName: 'Water' },
+  { id: 'electricity', name: 'Electricity', icon: Zap, backendName: 'Electricity' },
+  { id: 'garbage', name: 'Garbage', icon: Trash2, backendName: 'Garbage' },
+  { id: 'fire', name: 'Fire Dept', icon: Flame, backendName: 'Fire' },
+  { id: 'general', name: 'General', icon: MoreHorizontal, backendName: 'General' },
 ];
+
+interface Issue {
+  id: string;
+  description: string;
+  image_path: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  authority: string;
+  priority: number;
+  status: string;
+  authority_response: string | null;
+  created_at: string;
+}
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('road');
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchIssues();
+  }, [activeTab]);
+
+  const fetchIssues = async () => {
+    const category = categories.find(c => c.id === activeTab);
+    if (!category) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await api.get(`/authorities/${category.backendName}/issues`);
+      setIssues(response.data);
+    } catch (error) {
+      console.error("Failed to fetch issues:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateIssueStatus = async (issueId: string, currentStatus: string) => {
+    const category = categories.find(c => c.id === activeTab);
+    if (!category) return;
+
+    let newStatus = 'In Progress';
+    if (currentStatus === 'Reported') newStatus = 'In Progress';
+    else if (currentStatus === 'In Progress') newStatus = 'Resolved';
+    else return; // already resolved
+
+    setUpdatingId(issueId);
+    try {
+      await api.patch(`/authorities/${category.backendName}/issues/${issueId}`, {
+        status: newStatus
+      });
+      // Update local state
+      setIssues(issues.map(issue => 
+        issue.id === issueId ? { ...issue, status: newStatus } : issue
+      ));
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      alert("Failed to update status.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const activeCategoryName = categories.find(c => c.id === activeTab)?.name;
+  
+  // Calculate stats
+  const activeCount = issues.filter(i => i.status === 'Reported').length;
+  const inProgressCount = issues.filter(i => i.status === 'In Progress').length;
+  const resolvedCount = issues.filter(i => i.status === 'Resolved').length;
+  const criticalCount = issues.filter(i => i.priority >= 4).length;
 
   return (
     <div className="relative z-10 flex h-screen w-full overflow-hidden">
@@ -64,10 +134,9 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* Top Navbar */}
         <header className="h-20 flex-shrink-0 border-b border-white/10 liquid-glass bg-black/20 flex items-center justify-between px-8">
           <h2 className="text-2xl text-white font-normal" style={{ fontFamily: "'Instrument Serif', serif" }}>
-            {categories.find(c => c.id === activeTab)?.name} Overview
+            {activeCategoryName} Overview
           </h2>
           <div className="flex items-center space-x-6">
             <div className="relative hidden md:block">
@@ -87,24 +156,23 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
             <div className="liquid-glass rounded-2xl p-6 border-l-4 border-l-white bg-black/40">
               <p className="text-muted-foreground text-sm mb-1">Total Active Requests</p>
-              <h3 className="text-3xl text-foreground font-medium">1,245</h3>
+              <h3 className="text-3xl text-foreground font-medium">{activeCount}</h3>
             </div>
             <div className="liquid-glass rounded-2xl p-6 border-l-4 border-l-yellow-400 bg-black/40">
               <p className="text-muted-foreground text-sm mb-1">In Progress (Working)</p>
-              <h3 className="text-3xl text-foreground font-medium">342</h3>
+              <h3 className="text-3xl text-foreground font-medium">{inProgressCount}</h3>
             </div>
             <div className="liquid-glass rounded-2xl p-6 border-l-4 border-l-green-400 bg-black/40">
-              <p className="text-muted-foreground text-sm mb-1">Completed (This Month)</p>
-              <h3 className="text-3xl text-foreground font-medium">890</h3>
+              <p className="text-muted-foreground text-sm mb-1">Resolved</p>
+              <h3 className="text-3xl text-foreground font-medium">{resolvedCount}</h3>
             </div>
             <div className="liquid-glass rounded-2xl p-6 border-l-4 border-l-red-400 bg-black/40">
               <p className="text-muted-foreground text-sm mb-1">Critical Priority</p>
-              <h3 className="text-3xl text-foreground font-medium">28</h3>
+              <h3 className="text-3xl text-foreground font-medium">{criticalCount}</h3>
             </div>
           </div>
 
@@ -113,35 +181,61 @@ export default function AdminDashboard() {
               <div className="liquid-glass rounded-2xl p-6 flex-1 bg-black/40">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl text-foreground" style={{ fontFamily: "'Instrument Serif', serif" }}>Recent Logs</h3>
-                  <button className="text-xs text-white hover:underline">View All</button>
+                  <button onClick={fetchIssues} className="text-xs text-white hover:underline flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3" /> Refresh
+                  </button>
                 </div>
                 
                 <div className="space-y-4">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
-                      <div className="mb-4 sm:mb-0">
-                        <p className="text-foreground font-medium text-sm mb-1">Issue Reported on Sector {i} #{i}04{activeTab.substring(0,2).toUpperCase()}</p>
-                        <p className="text-muted-foreground text-xs flex items-center space-x-3">
-                          <span>Reported: {i}h ago</span>
-                          <span className="w-1 h-1 rounded-full bg-white/20"></span>
-                          <span>By: Citizen_{492 + i}</span>
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        {i === 1 && <span className="flex items-center space-x-1 text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"><Clock className="w-3 h-3"/> <span>Working</span></span>}
-                        {i === 2 && <span className="flex items-center space-x-1 text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30"><AlertTriangle className="w-3 h-3"/> <span>Active</span></span>}
-                        {i > 2 && <span className="flex items-center space-x-1 text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-300 border border-green-500/30"><CheckCircle className="w-3 h-3"/> <span>Completed</span></span>}
-                        <button className="text-xs px-3 py-1.5 rounded-full bg-white text-black font-medium hover:bg-gray-200 transition-colors">Details</button>
-                      </div>
+                  {isLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="w-8 h-8 animate-spin text-white/50" />
                     </div>
-                  ))}
+                  ) : issues.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No issues found for this category.</div>
+                  ) : (
+                    issues.map(issue => (
+                      <div key={issue.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                        <div className="mb-4 sm:mb-0">
+                          <div className="flex items-center space-x-2 mb-1">
+                            {issue.priority >= 4 ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-red-500/20 text-red-400 border border-red-500/30">Prio {issue.priority}</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-white/10 text-muted-foreground border border-white/10">Prio {issue.priority}</span>
+                            )}
+                            <p className="text-foreground font-medium text-sm">{issue.description}</p>
+                          </div>
+                          <p className="text-muted-foreground text-xs flex items-center space-x-3 mt-1">
+                            <span>ID: {issue.id.substring(0,8)}</span>
+                            <span className="w-1 h-1 rounded-full bg-white/20"></span>
+                            <span>Reported: {new Date(issue.created_at).toLocaleDateString()}</span>
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          {issue.status === 'In Progress' && <span className="flex items-center space-x-1 text-xs px-2 py-1 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/30"><Clock className="w-3 h-3"/> <span>Working</span></span>}
+                          {issue.status === 'Reported' && <span className="flex items-center space-x-1 text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30"><AlertTriangle className="w-3 h-3"/> <span>Active</span></span>}
+                          {issue.status === 'Resolved' && <span className="flex items-center space-x-1 text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-300 border border-green-500/30"><CheckCircle className="w-3 h-3"/> <span>Completed</span></span>}
+                          
+                          {issue.status !== 'Resolved' && (
+                            <button 
+                              onClick={() => updateIssueStatus(issue.id, issue.status)}
+                              disabled={updatingId === issue.id}
+                              className="text-xs px-3 py-1.5 rounded-full bg-white text-black font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"
+                            >
+                              {updatingId === issue.id ? 'Updating...' : (issue.status === 'Reported' ? 'Start Work' : 'Mark Resolved')}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="liquid-glass rounded-2xl p-6 flex flex-col bg-black/40">
               <h3 className="text-xl text-foreground mb-2" style={{ fontFamily: "'Instrument Serif', serif" }}>Progress Analytics</h3>
-              <p className="text-muted-foreground text-xs mb-8">Resolution vs New Requests</p>
+              <p className="text-muted-foreground text-xs mb-8">Resolution vs New Requests (Mock)</p>
               
               <div className="flex-1 min-h-[250px] w-full mb-8">
                 <ResponsiveContainer width="100%" height="100%">

@@ -19,10 +19,8 @@ export default function Landing() {
     const target = document.querySelector(id) as HTMLElement;
     if (!target) return;
     
-    // @ts-expect-error
-    if (window.lenis) {
-      // @ts-expect-error
-      window.lenis.scrollTo(target, { offset: 0 });
+    if ((window as any).lenis) {
+      (window as any).lenis.scrollTo(target, { offset: 0 });
     } else {
       window.scrollTo({
         top: target.offsetTop,
